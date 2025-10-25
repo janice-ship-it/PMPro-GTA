@@ -1,0 +1,2413 @@
+<?php
+// Exit if accessed directly
+if ( !defined( 'ABSPATH' ) ) exit;
+
+// BEGIN ENQUEUE PARENT ACTION
+// AUTO GENERATED - Do not modify or remove comment markers above or below:
+
+if ( !function_exists( 'chld_thm_cfg_locale_css' ) ):
+    function chld_thm_cfg_locale_css( $uri ){
+        if ( empty( $uri ) && is_rtl() && file_exists( get_template_directory() . '/rtl.css' ) )
+            $uri = get_template_directory_uri() . '/rtl.css';
+        return $uri;
+    }
+endif;
+add_filter( 'locale_stylesheet_uri', 'chld_thm_cfg_locale_css' );
+
+function custom_woocommerce_loop_add_to_cart_button($link, $product) {
+    // Get the product URL
+    $product_url = get_permalink($product->get_id());
+
+    // Replace "Add to Cart" button with "View Product" button
+    $button_text = __('View Product', 'woocommerce');
+
+    return '<a href="' . esc_url($product_url) . '" class="button view-product-button">' . esc_html($button_text) . '</a>';
+}
+
+// Apply the filter to modify the add to cart button in the loop
+add_filter('woocommerce_loop_add_to_cart_link', 'custom_woocommerce_loop_add_to_cart_button', 10, 2);
+
+
+// END ENQUEUE PARENT ACTION
+
+add_filter('woocommerce_get_price_html', 'add_gst_text_to_price', 99, 2);
+function add_gst_text_to_price($price, $product) {
+    return $price . ' <small>(Incl. GST)</small>';
+}
+
+add_action('woocommerce_payment_complete', 'auto_complete_credit_card_orders');
+
+function auto_complete_credit_card_orders($order_id) {
+    if (!$order_id) return;
+    
+    $order = wc_get_order($order_id);
+    if (!$order) return;
+
+    // Get the payment method used
+    $payment_method = $order->get_payment_method();
+
+    // List of payment methods that should trigger auto-completion
+    $instant_payment_methods = array('stripe', 'paypal', 'braintree'); // Add your methods
+
+    if (in_array($payment_method, $instant_payment_methods)) {
+        // Set order status to Completed
+        $order->update_status('completed');
+        error_log("✅ Order #$order_id marked as Completed (Payment via: $payment_method)");
+
+        // Trigger custom email function manually
+        send_custom_emails_for_each_product($order_id);
+    }
+}
+
+
+
+
+
+add_action( 'admin_enqueue_scripts', function( $hook ) {
+    // Only enqueue on the members list or PMPro settings pages
+    if ( strpos( $hook, 'pmpro-memberslist' ) !== false || strpos( $hook, 'pmpro-membershiplevels' ) !== false ) {
+        wp_enqueue_script( 'pmpro-custom-safe-admin-js', get_stylesheet_directory_uri() . '/js/pmpro-admin-safe.js', array( 'jquery' ), null, true );
+        // No inline script added unless explicitly needed
+    }
+});
+
+/**
+ * Ensure PMPro Accepts Custom Fields in AJAX
+ */
+function custom_pmpro_force_extra_fields($fields) {
+    $fields[] = 'gta_number';
+    return $fields;
+}
+add_filter('pmpro_additional_user_fields', 'custom_pmpro_force_extra_fields');
+
+/**
+ * Handle AJAX Request to Fetch Updated GTA-Number.
+ */
+function custom_pmpro_get_gta_number() {
+    if (!isset($_POST['user_id']) || empty($_POST['user_id'])) {
+        wp_send_json_error('Invalid user ID');
+    }
+
+    $user_id = (int) $_POST['user_id'];
+    $gta_number = get_user_meta($user_id, 'gta_number', true);
+
+    wp_send_json_success($gta_number);
+}
+add_action('wp_ajax_pmpro_get_gta_number', 'custom_pmpro_get_gta_number');
+
+function custom_pmpro_capture_post_data() {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        error_log("🔍 FULL PMPro POST Submission: " . print_r($_POST, true));
+    }
+}
+add_action('admin_init', 'custom_pmpro_capture_post_data');
+
+/**
+ * Adds "GTA-Number" column to the Members List.
+ *
+ * @param array $columns The existing columns.
+ * @return array Modified columns with "GTA-Number" added.
+ */
+function custom_pmpro_add_memberslist_column( $columns ) {
+    $columns['gta_number'] = __('GTA-Number', 'paid-memberships-pro');
+    return $columns;
+}
+add_filter( 'pmpro_manage_memberslist_columns', 'custom_pmpro_add_memberslist_column' );
+
+/**
+ * Populates the "GTA-Number" column in the Members List.
+ *
+ * @param string $column_name The name of the column to populate.
+ * @param int $user_id The ID of the user for the current row.
+ */
+function custom_pmpro_fill_memberslist_column( $column_name, $user_id ) {
+    if ( 'gta_number' === $column_name ) {
+        $gta_number = get_user_meta( $user_id, 'gta_number', true );
+        echo esc_html( $gta_number );
+    }
+}
+add_action( 'pmpro_manage_memberslist_custom_column', 'custom_pmpro_fill_memberslist_column', 10, 2 );
+
+
+
+function custom_pmpro_members_list_column_data($colname, $user_id) {
+    if ($colname === 'gta_number') {
+        // Check if user ID is valid
+        if (empty($user_id) || !is_numeric($user_id)) {
+            error_log("❌ Invalid User ID in GTA-Number Column: " . print_r($user_id, true));
+            echo '<span style="color:red;">Error: Invalid User</span>';
+            return;
+        }
+
+        // Retrieve GTA Number
+        $gta_number = get_user_meta($user_id, 'gta_number', true);
+
+        // Debugging Log
+        error_log("📝 Fetching GTA-Number for User ID: $user_id - Value: " . print_r($gta_number, true));
+
+        // Display Value
+        echo !empty($gta_number) ? esc_html($gta_number) : '<span style="color:red;">No Data</span>';
+    }
+}
+add_filter('pmpro_memberslist_extra_cols_body', 'custom_pmpro_members_list_column_data', 10, 2);
+
+
+
+// function custom_pmpro_force_refresh() {
+//     echo "<script>
+//         jQuery(document).ready(function() {
+//             setTimeout(function() {
+//                 jQuery('table.wp-list-table').load(window.location.href + ' table.wp-list-table > *');
+//                 console.log('🔄 Forced PMPro Members List Table Refresh');
+//             }, 2000);
+//         });
+//     </script>";
+// }
+// add_action('admin_footer', 'custom_pmpro_force_refresh');
+
+/**
+ * Retrieve the 'GTA-Number' for a user for CSV export.
+ *
+ * @param object $user The user object containing user data.
+ * @return string The 'GTA-Number' or an empty string if not set.
+ */
+function custom_pmpro_export_gta_number($user) {
+    if (!empty($user->ID)) {
+        return get_user_meta($user->ID, 'gta_number', true); // Fetch the meta value correctly
+    } else {
+        return ''; // Return an empty value if no user ID exists
+    }
+}
+
+/**
+ * Add custom columns to the PMPro members list CSV export.
+ *
+ * @param array $columns Existing columns in the CSV export.
+ * @return array Modified columns including the new custom column.
+ */
+function custom_pmpro_members_list_csv_extra_columns($columns) {
+    $columns['gta_number'] = 'custom_pmpro_export_gta_number'; // Map column to function
+    return $columns;
+}
+add_filter('pmpro_members_list_csv_extra_columns', 'custom_pmpro_members_list_csv_extra_columns');
+
+/**
+ * Add GTA-Number field to the "Add New User" form in WordPress Admin.
+ */
+
+
+
+/**
+ * Save GTA-Number when a new user is created.
+ */
+function custom_pmpro_save_gta_number_on_registration($user_id) {
+    if (isset($_POST['gta_number'])) {
+        $gta_number = sanitize_text_field($_POST['gta_number']);
+        update_user_meta($user_id, 'gta_number', $gta_number);
+    }
+}
+add_action('user_register', 'custom_pmpro_save_gta_number_on_registration');
+
+/**
+ * Show GTA-Number in User Profile (Admin).
+ */
+
+
+function custom_pmpro_add_institute_dropdown($user) {
+    $user_id = is_object($user) ? $user->ID : (int) $user;
+    
+    // Fetch assigned institutes (if any)
+    $selected_institutes = get_user_meta($user_id, 'assigned_institutes', true);
+    if (!is_array($selected_institutes)) {
+        $selected_institutes = [];
+    }
+
+    // Fetch available institutes (CPT)
+    $institutes = get_posts([
+       'post_type'      => 'institute',
+        'posts_per_page' => -1,
+        'post_status'    => 'publish',
+        'orderby'        => 'title',
+        'order'          => 'ASC',
+    ]);
+
+    ?>
+    <h3><?php _e('Assign Institutes', 'paid-memberships-pro'); ?></h3>
+    <table class="form-table">
+        <tr>
+            <th><label for="assigned_institutes"><?php _e('Select Institute', 'paid-memberships-pro'); ?></label></th>
+            <td>
+                <select name="assigned_institutes[]" id="assigned_institutes" multiple>
+                    <?php foreach ($institutes as $institute): ?>
+                        <option value="<?php echo esc_attr($institute->ID); ?>" 
+                            <?php echo in_array($institute->ID, $selected_institutes) ? 'selected' : ''; ?>>
+                            <?php echo esc_html($institute->post_title); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <p class="description">Hold CTRL (Windows) or CMD (Mac) to select multiple institutes.</p>
+            </td>
+        </tr>
+    </table>
+    <?php
+}
+
+// Add the dropdown to "Add New Member" and "Edit Member" pages
+add_action('show_user_profile', 'custom_pmpro_add_institute_dropdown'); // For user edit
+add_action('edit_user_profile', 'custom_pmpro_add_institute_dropdown'); // For admin edit
+add_action('user_new_form', 'custom_pmpro_add_institute_dropdown'); // For adding new user
+
+function custom_pmpro_save_assigned_institutes($user_id) {
+    if (!current_user_can('edit_user', $user_id)) {
+        return false;
+    }
+
+    if (isset($_POST['assigned_institutes'])) {
+        $assigned_institutes = array_map('intval', $_POST['assigned_institutes']);
+        update_user_meta($user_id, 'assigned_institutes', $assigned_institutes);
+        error_log("✅ Assigned Institutes Saved for User ID: $user_id - " . implode(', ', $assigned_institutes));
+    } else {
+        update_user_meta($user_id, 'assigned_institutes', []);
+        error_log("⚠️ No Institutes Assigned for User ID: $user_id");
+    }
+}
+
+// Save assigned institutes when a user is created or updated
+add_action('personal_options_update', 'custom_pmpro_save_assigned_institutes');
+add_action('edit_user_profile_update', 'custom_pmpro_save_assigned_institutes');
+add_action('user_register', 'custom_pmpro_save_assigned_institutes');
+
+function custom_pmpro_add_institute_field($user) {
+    $taxonomies = get_terms(array(
+        'taxonomy'   => 'institute',
+        'hide_empty' => false,
+    ));
+
+    // Check if get_terms() returned an error
+    if (is_wp_error($taxonomies)) {
+        error_log("❌ Error fetching Institutes: " . $taxonomies->get_error_message());
+        return;
+    }
+
+    $user_id = is_object($user) ? $user->ID : (int) $user;
+    $user_terms = wp_get_object_terms($user_id, 'institute', array('fields' => 'ids'));
+    $selected_institute = !empty($user_terms) ? $user_terms[0] : '';
+
+    ?>
+    <h3>Institute</h3>
+    <table class="form-table">
+        <tr>
+            <th><label for="institute">Select Institute</label></th>
+            <td>
+                <select name="institute" id="institute" style="width: 100%;">
+                    <option value="">-- Select an Institute --</option>
+                    <?php foreach ($taxonomies as $taxonomy) : ?>
+                        <option value="<?php echo esc_attr($taxonomy->term_id); ?>" <?php selected($selected_institute, $taxonomy->term_id); ?>>
+                            <?php echo esc_html($taxonomy->name); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <p class="description">Assign an institute to this member.</p>
+            </td>
+        </tr>
+    </table>
+    <?php
+}
+// Add this field to the PMPro "Add Member" form
+add_action('pmpro_after_membership_level_profile_fields', 'custom_pmpro_add_institute_field');
+
+
+function custom_pmpro_save_institute_field($user_id) {
+    if (!current_user_can('edit_user', $user_id)) {
+        return false;
+    }
+
+    if (!empty($_POST['institute'])) {
+        $institute_id = intval($_POST['institute']);
+        update_user_meta($user_id, 'institute_id', $institute_id);
+        error_log("✅ Institute Assigned to User ID $user_id - Institute ID: $institute_id");
+    } else {
+        delete_user_meta($user_id, 'institute_id');
+        error_log("⚠️ No Institute Assigned for User ID: $user_id");
+    }
+}
+add_action('pmpro_save_add_member', 'custom_pmpro_save_institute_field');
+add_action('profile_update', 'custom_pmpro_save_institute_field');
+add_action('edit_user_profile_update', 'custom_pmpro_save_institute_field');
+
+/**
+ * Add Institute Dropdown to Add Member Form
+ */
+function custom_pmpro_add_member_form_fields() {
+    ?>
+    <h3>Additional Information</h3>
+    <table class="form-table check3">
+       
+        <tr>
+            <th><label for="institute">Select Institute</label></th>
+            <td>
+                <select name="institute" id="institute" style="width: 100%;">
+                    <option value="">-- Select an Institute --</option>
+                    <?php
+                    $institutes = get_posts(array(
+                    'post_type'      => 'institute',
+                    'posts_per_page' => -1,
+                    'post_status'    => 'publish',
+                    'orderby'        => 'title',
+                    'order'          => 'ASC',
+                    'suppress_filters'=> false,
+                    ));
+
+                    foreach ($institutes as $institute) {
+                        echo '<option value="' . esc_attr($institute->ID) . '">' . esc_html($institute->post_title) . '</option>';
+                    }
+                    ?>
+                </select>
+                <p class="description">Assign an institute to this new member.</p>
+            </td>
+        </tr>
+    </table>
+    <?php
+}
+add_action('pmpro_add_member_fields', 'custom_pmpro_add_member_form_fields');
+
+/**
+ * Save Additional Fields (GTA-Number & Institute) When Adding a Member
+ */
+function custom_pmpro_save_member_custom_fields($user_id) {
+    if (!current_user_can('edit_user', $user_id)) return false;
+
+    if (!empty($_POST['gta_number'])) {
+        update_user_meta($user_id, 'gta_number', sanitize_text_field($_POST['gta_number']));
+    }
+
+    if (!empty($_POST['institute'])) {
+        update_user_meta($user_id, 'institute_id', intval($_POST['institute']));
+    }
+}
+add_action('pmpro_save_add_member', 'custom_pmpro_save_member_custom_fields');
+
+function custom_pmpro_save_additional_fields($user_id) {
+    if (!current_user_can('edit_user', $user_id)) {
+        return false;
+    }
+
+    error_log("🔍 PMPro Save Hook Triggered for User ID: $user_id");
+
+    // Save GTA Number
+    if (!empty($_POST['gta_number'])) {
+        $gta_number = sanitize_text_field($_POST['gta_number']);
+        update_user_meta($user_id, 'gta_number', $gta_number);
+        error_log("✅ GTA-Number Successfully Saved: " . $gta_number);
+    }
+
+    // Save Institute (Corrected key)
+    if (!empty($_POST['institute'])) {
+        $institute_id = intval($_POST['institute']);
+        update_user_meta($user_id, 'institute_id', $institute_id); // ✅ Fixed key
+        error_log("✅ Institute Successfully Assigned: " . $institute_id);
+    } else {
+        error_log("⚠️ No Institutes Assigned for User ID: $user_id");
+    }
+}
+add_action('user_register', 'custom_pmpro_save_additional_fields');
+add_action('profile_update', 'custom_pmpro_save_additional_fields');
+add_action('pmpro_after_change_membership_level', 'custom_pmpro_save_additional_fields');
+
+
+
+function custom_pmpro_assign_membership_on_add($user_id) {
+    if (!current_user_can('edit_user', $user_id)) {
+        return;
+    }
+
+    if (isset($_POST['membership_level']) && !empty($_POST['membership_level'])) {
+        $membership_level = intval($_POST['membership_level']);
+        pmpro_changeMembershipLevel($membership_level, $user_id); // Assigns PMPro membership
+        error_log("✅ Assigned Membership Level: $membership_level to User ID: $user_id");
+    } else {
+        error_log("⚠️ No Membership Level Selected for User ID: $user_id");
+    }
+}
+add_action('pmpro_save_add_member', 'custom_pmpro_assign_membership_on_add');
+
+
+function custom_pmpro_additional_member_fields($user) {
+    $user_id = is_object($user) ? $user->ID : (int) $user;
+    
+    // Fetch GTA Number
+    $gta_number = get_user_meta($user_id, 'gta_number', true);
+    
+    // Fetch Assigned Institute
+    $selected_institute = get_user_meta($user_id, 'institute_id', true);
+
+    // Fetch Institutes CPT
+    $institutes = get_posts([
+        'post_type'      => 'institute',
+        'posts_per_page' => -1,
+        'post_status'    => 'publish',
+        'orderby'        => 'title',
+        'order'          => 'ASC',
+    ]);
+
+    ?>
+    <h3><?php _e('Additional Information', 'paid-memberships-pro'); ?></h3>
+    <table class="form-table">
+       
+        <tr>
+            <th><label for="institute"><?php _e('Select Institute', 'paid-memberships-pro'); ?></label></th>
+            <td>
+                <select name="institute" id="institute">
+                    <option value="">-- Select an Institute --</option>
+                    <?php
+                    foreach ($institutes as $institute) {
+                        $selected = ($selected_institute == $institute->ID) ? 'selected' : '';
+                        echo '<option value="' . esc_attr($institute->ID) . '" ' . $selected . '>' . esc_html($institute->post_title) . '</option>';
+                    }
+                    ?>
+                </select>
+                <p class="description">Assign an institute to this member.</p>
+            </td>
+        </tr>
+    </table>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            let pmproForm = document.querySelector("form.pmpro-members");
+            if (pmproForm) {
+                pmproForm.addEventListener("submit", function(event) {
+                    let gtaNumberInput = document.getElementById("gta_number");
+                    if (gtaNumberInput) {
+                        let hiddenInput = document.createElement("input");
+                        hiddenInput.type = "hidden";
+                        hiddenInput.name = "gta_number";
+                        hiddenInput.value = gtaNumberInput.value;
+                        pmproForm.appendChild(hiddenInput);
+                    }
+                });
+            }
+        });
+    </script>
+    <?php
+}
+add_action('pmpro_after_membership_level_profile_fields', 'custom_pmpro_additional_member_fields');
+
+
+/**
+ * Register Custom Post Type: Institutes
+ */
+function custom_register_institutes_cpt() {
+    $labels = array(
+        'name'               => __('Institutes', 'paid-memberships-pro'),
+        'singular_name'      => __('Institute', 'paid-memberships-pro'),
+        'menu_name'          => __('Institutes', 'paid-memberships-pro'),
+        'add_new'            => __('Add New', 'paid-memberships-pro'),
+        'add_new_item'       => __('Add New Institute', 'paid-memberships-pro'),
+        'edit_item'          => __('Edit Institute', 'paid-memberships-pro'),
+        'new_item'           => __('New Institute', 'paid-memberships-pro'),
+        'view_item'          => __('View Institute', 'paid-memberships-pro'),
+        'search_items'       => __('Search Institutes', 'paid-memberships-pro'),
+        'not_found'          => __('No Institutes found', 'paid-memberships-pro'),
+        'not_found_in_trash' => __('No Institutes found in Trash', 'paid-memberships-pro'),
+    );
+
+    $args = array(
+        'label'               => __('Institutes', 'paid-memberships-pro'),
+        'labels'              => $labels,
+        'public'              => true,
+        'show_ui'             => true,
+        'show_in_menu'        => 'pmpro-membershiplevels',
+        'menu_position'       => 25,
+        'capability_type'     => 'post',
+        'has_archive'         => true,
+        'hierarchical'        => false,
+        'supports'            => array('title', 'editor'),
+        'menu_icon'           => 'dashicons-building',
+    );
+
+    register_post_type('institute', $args);
+}
+add_action('init', 'custom_register_institutes_cpt');
+
+
+/**
+ * Add "Institutes" Column to PMPro Members List
+ */
+function custom_pmpro_add_institutes_column($columns) {
+    $columns['institutes'] = __('Institute', 'paid-memberships-pro');
+    return $columns;
+}
+add_filter('pmpro_manage_memberslist_columns', 'custom_pmpro_add_institutes_column');
+
+
+function custom_pmpro_fill_institutes_column($column_name, $user_id) {
+    if ($column_name === 'institutes') {
+        $institute_id = get_user_meta($user_id, 'institute_id', true);
+        if ($institute_id) {
+            echo '<a href="' . get_edit_post_link($institute_id) . '">' . esc_html(get_the_title($institute_id)) . '</a>';
+        } else {
+            echo '<span style="color:red;">No Institute</span>';
+        }
+    }
+}
+add_action('pmpro_manage_memberslist_custom_column', 'custom_pmpro_fill_institutes_column', 10, 2);
+
+
+/**
+ * Save the User ID when creating an Institute
+ */
+function custom_save_institute_user_id($post_id) {
+    if (get_post_type($post_id) !== 'institute') {
+        return;
+    }
+
+    if (isset($_POST['member_id'])) {
+        update_post_meta($post_id, 'member_id', intval($_POST['member_id']));
+    }
+}
+add_action('save_post', 'custom_save_institute_user_id');
+
+
+/**
+ * Add Institutes to PMPro CSV Export
+ */
+function custom_pmpro_export_institutes($headers) {
+    $headers['institutes'] = 'Institutes';
+    return $headers;
+}
+add_filter('pmpro_members_list_csv_extra_columns', 'custom_pmpro_export_institutes');
+
+
+/**
+ * Populate Institutes in CSV Export
+ */
+function custom_pmpro_fill_institutes_csv($user) {
+    $institute_id = get_user_meta($user->ID, 'institute_id', true);
+    return $institute_id ? get_the_title($institute_id) : 'No Institute';
+}
+add_filter('pmpro_members_list_csv_extra_columns_body', 'custom_pmpro_fill_institutes_csv', 10, 2);
+
+// Register the column name and callback function for CSV export
+add_filter('pmpro_members_list_csv_extra_columns', function($cols) {
+    $cols['institutes'] = 'custom_pmpro_fill_institutes_csv';
+    return $cols;
+});
+
+/**
+ * Add a "Member" dropdown in the Institute post edit screen.
+ */
+function custom_institute_meta_box() {
+    add_meta_box(
+        'institute_member_meta', // Meta box ID
+        __('Assign to Member', 'textdomain'), // Title
+        'custom_render_institute_meta_box', // Callback function
+        'institute', // Post type
+        'side', // Position
+        'default' // Priority
+    );
+}
+add_action('add_meta_boxes', 'custom_institute_meta_box');
+
+/**
+ * Render the Institute Meta Box with a dropdown of users.
+ */
+function custom_render_institute_meta_box($post) {
+    $assigned_user_id = get_post_meta($post->ID, 'member_id', true);
+    $users = get_users(['role__in' => ['subscriber', 'customer', 'pmpro_member']]); // Adjust roles if needed
+
+    echo '<label for="member_id">' . __('Select Member:', 'textdomain') . '</label><br>';
+    echo '<select name="member_id" id="member_id">';
+    echo '<option value="">— No Member —</option>';
+
+    foreach ($users as $user) {
+        echo '<option value="' . esc_attr($user->ID) . '" ' . selected($assigned_user_id, $user->ID, false) . '>';
+        echo esc_html($user->display_name . ' (' . $user->user_email . ')');
+        echo '</option>';
+    }
+
+    echo '</select>';
+}
+
+/**
+ * Save the selected Member when updating the Institute.
+ */
+function custom_save_institute_member($post_id) {
+    if (get_post_type($post_id) !== 'institute') return;
+    
+    if (isset($_POST['member_id'])) {
+        update_post_meta($post_id, 'member_id', intval($_POST['member_id']));
+    }
+}
+add_action('save_post', 'custom_save_institute_member');
+
+/**
+ * Show Assigned Institutes in User Profile
+ */
+function custom_display_user_institutes($user) {
+    $args = array(
+        'post_type'   => 'institute',
+        'post_status' => 'publish',
+        'meta_query'  => array(
+            array(
+                'key'   => 'member_id',
+                'value' => $user->ID,
+                'compare' => '='
+            )
+        )
+    );
+
+    $institutes = get_posts($args);
+
+    echo '<h3>' . __('Assigned Institutes', 'textdomain') . '</h3>';
+    if (!empty($institutes)) {
+        echo '<ul>';
+        foreach ($institutes as $institute) {
+            echo '<li><a href="' . get_edit_post_link($institute->ID) . '">' . esc_html($institute->post_title) . '</a></li>';
+        }
+        echo '</ul>';
+    } else {
+        echo '<p>No institutes assigned.</p>';
+    }
+}
+add_action('show_user_profile', 'custom_display_user_institutes');
+add_action('edit_user_profile', 'custom_display_user_institutes');
+
+
+/**
+ * Add an Admin Menu Page for Assigning Institutes to Users
+ */
+function custom_institutes_admin_menu() {
+    add_submenu_page(
+        'edit.php?post_type=institute', // Parent menu (Institute CPT)
+        __('Assign Institutes to Users', 'textdomain'),
+        __('Assign Institutes', 'textdomain'),
+        'manage_options',
+        'assign-institutes',
+        'custom_render_assign_institutes_page'
+    );
+}
+add_action('admin_menu', 'custom_institutes_admin_menu');
+
+/**
+ * Render the Assign Institutes Page
+ */
+function custom_render_assign_institutes_page() {
+    if (isset($_POST['assign_institutes'])) {
+        foreach ($_POST['institute_assignments'] as $institute_id => $user_id) {
+            update_post_meta($institute_id, 'member_id', intval($user_id));
+        }
+        echo '<div class="updated"><p>Institutes assigned successfully!</p></div>';
+    }
+
+    $institutes = get_posts(['post_type' => 'institute', 'numberposts' => -1]);
+    $users = get_users(['role__in' => ['subscriber', 'customer', 'pmpro_member']]);
+
+    echo '<div class="wrap"><h1>Assign Institutes to Users</h1>';
+    echo '<form method="post">';
+    echo '<table class="widefat"><thead><tr><th>Institute</th><th>Assigned Member</th></tr></thead><tbody>';
+
+    foreach ($institutes as $institute) {
+        $assigned_user = get_post_meta($institute->ID, 'member_id', true);
+        echo '<tr><td>' . esc_html($institute->post_title) . '</td><td>';
+        echo '<select name="institute_assignments[' . $institute->ID . ']">';
+        echo '<option value="">— No Member —</option>';
+
+        foreach ($users as $user) {
+            echo '<option value="' . esc_attr($user->ID) . '" ' . selected($assigned_user, $user->ID, false) . '>';
+            echo esc_html($user->display_name . ' (' . $user->user_email . ')');
+            echo '</option>';
+        }
+
+        echo '</select></td></tr>';
+    }
+
+    echo '</tbody></table>';
+    echo '<p><input type="submit" name="assign_institutes" class="button-primary" value="Save Assignments"></p>';
+    echo '</form></div>';
+}
+
+
+// Start of custom overrides - Insert just after the opening form tag in pmpro_form
+
+
+// Add GTA Number and Contact Number below email fields in account section
+add_action('pmpro_checkout_after_email', function () {
+    ?>
+    <div class="pmpro_form_field pmpro_form_field-text">
+        <label for="gta_number">GTA Number <span style="color:red;font-size:14px;">It will be auto-generated on checkout</span></label>
+    <input type="text" id="gta_number" name="gta_number" class="pmpro_form_input" 
+           value="<?php echo esc_attr(get_user_meta(get_current_user_id(), 'gta_number', true)); ?>" 
+           readonly disabled />
+    </div>
+    <div class="pmpro_form_field pmpro_form_field-text">
+        <label for="contact_number">Mobile Number</label>
+        <input type="text" name="contact_number" id="contact_number" value="<?php echo isset($_POST['contact_number']) ? esc_attr($_POST['contact_number']) : ''; ?>">
+    </div>
+    
+
+    <div id="additional-members-section" style="margin-top: 20px;">
+        <h3>Add Additional Members <span style="color:red;font-size:14px;letter-spacing: 0px;">You need to Fill out the sub members, if not you can delete the field</span></h3>
+       <div id="additional-members-container"></div>
+        <button type="button" id="add-member">+ Add Another Member</button>
+    </div>
+
+     <!--Custom Alert Modal -->
+    <div id="customAlert" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border:1px solid #ccc;padding:20px;z-index:9999;box-shadow:0 2px 10px rgba(0,0,0,0.2);border-radius:8px;text-align:center;">
+        <p id="customAlertMessage" style="margin-bottom: 20px; font-weight: bold;"></p>
+        <button onclick="closeCustomAlert()" style="padding: 8px 20px; background-color: #0073aa; color: white; border: none; border-radius: 4px;">OK</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const addBtn = document.getElementById('add-member');
+            const container = document.getElementById('additional-members-container');
+            const levelInput = document.querySelector('input[name="pmpro_level"]');
+            const levelId = parseInt(levelInput ? levelInput.value : 0);
+
+            const subMemberLimits = {
+                1: 0,  // Personal/Concession - no members
+                2: 4,  // 7-12
+                3: 9,  // K-12
+                4: 4,  // K-6
+                5: 1   // Corporate
+            };
+
+            let memberIndex = 1;
+
+            if (subMemberLimits[levelId] === 0) {
+                document.getElementById('additional-members-section').style.display = 'none';
+                return;
+            }
+            // Automatically add the first entry when allowed
+            const div = document.createElement('div');
+            div.className = 'member-entry';
+            div.style.display = 'flex';
+            div.style.gap = '10px';
+            div.style.marginBottom = '10px';
+            div.innerHTML = `
+                <input type="text" name="additional_members[0][first_name]" placeholder="First Name *" required />
+                <input type="text" name="additional_members[0][last_name]" placeholder="Last Name *" required />
+                <input type="email" name="additional_members[0][email]" placeholder="Email *" required />
+                <input type="text" name="additional_members[0][mobile]" placeholder="Mobile" />
+                <button type="button" class="remove-member" onclick="removeMember(this)">−</button>
+            `;
+            container.appendChild(div);
+
+
+            addBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+
+                const currentCount = container.querySelectorAll('.member-entry').length;
+                const maxAllowed = subMemberLimits[levelId] || 0;
+
+                if (currentCount >= maxAllowed) {
+                    showCustomAlert(`You can only add up to ${maxAllowed} additional member(s) for this membership level.`);
+                    return;
+                }
+
+                const div = document.createElement('div');
+                div.className = 'member-entry';
+                div.style.display = 'flex';
+                div.style.gap = '10px';
+                div.style.marginBottom = '10px';
+                div.innerHTML = `
+                    <input type="text" name="additional_members[${memberIndex}][first_name]" placeholder="First Name *" required  />
+                    <input type="text" name="additional_members[${memberIndex}][last_name]" placeholder="Last Name *" required />
+                    <input type="email" name="additional_members[${memberIndex}][email]" placeholder="Email *" required />
+                    <input type="text" name="additional_members[${memberIndex}][mobile]" placeholder="Mobile" />
+                    <button type="button" class="remove-member" onclick="removeMember(this)">−</button>
+                `;
+                container.appendChild(div);
+                memberIndex++;
+            });
+        });
+
+        function removeMember(button) {
+            const entry = button.closest('.member-entry');
+            if (entry) entry.remove();
+        }
+
+        function showCustomAlert(message) {
+            document.getElementById('customAlertMessage').textContent = message;
+            document.getElementById('customAlert').style.display = 'block';
+        }
+
+        function closeCustomAlert() {
+            document.getElementById('customAlert').style.display = 'none';
+        }
+    </script>
+
+    <?php
+});
+
+// Remove Billing Address fieldset
+add_filter('pmpro_include_billing_address_fields', '__return_false');
+
+
+add_action('pmpro_after_checkout', 'save_custom_fields_pmpro');
+function save_custom_fields_pmpro($user_id) {
+    if (!empty($_POST['gta_number'])) {
+        update_user_meta($user_id, 'gta_number', sanitize_text_field($_POST['gta_number']));
+    }
+    if (!empty($_POST['contact_number'])) {
+        update_user_meta($user_id, 'contact_number', sanitize_text_field($_POST['contact_number']));
+    }
+}
+
+function save_selected_or_new_institute_on_checkout($user_id) {
+    error_log("🏁 STARTING institute save for user: " . $user_id);
+    
+    // Debug ACF function availability
+    error_log("🔍 ACF function exists: " . (function_exists('update_field') ? 'Yes' : 'No'));
+    
+    // Check if we should proceed
+    if (get_user_meta($user_id, '_institute_saved', true)) {
+        error_log("⏩ Skipping - already saved institute for this user");
+        return;
+    }
+
+    // Debug form data
+    error_log("📋 Form data:");
+    error_log("selected_institute: " . ($_POST['selected_institute'] ?? 'empty'));
+    error_log("add_new_institute_checkbox: " . ($_POST['add_new_institute_checkbox'] ?? 'not checked'));
+    error_log("new_institute_name: " . ($_POST['new_institute_name'] ?? 'empty'));
+
+    // Handle selected institute
+    $selected_institute = isset($_POST['selected_institute']) ? intval($_POST['selected_institute']) : 0;
+    
+    // Handle new institute creation
+    if (!empty($_POST['add_new_institute_checkbox'])) {
+        error_log("🆕 New institute requested");
+        
+        $institute_name = sanitize_text_field($_POST['new_institute_name'] ?? '');
+        $address = sanitize_text_field($_POST['new_institute_address'] ?? '');
+        $suburb = sanitize_text_field($_POST['new_institute_suburbtown'] ?? '');
+        $state = sanitize_text_field($_POST['new_institute_state'] ?? '');
+        $postcode = sanitize_text_field($_POST['new_institute_postcode'] ?? '');
+
+        if (empty($institute_name) && empty($address) && empty($suburb)) {
+            error_log("⚠️ Skipping - all institute fields are empty");
+            return;
+        }
+
+        $post_title = $institute_name ?: ($suburb && $state ? "$suburb, $state" : 'New Institute ' . time());
+        
+        error_log("📝 Creating institute with title: " . $post_title);
+        
+        $new_post_id = wp_insert_post([
+            'post_type' => 'institute',
+            'post_status' => 'publish',
+            'post_title' => $post_title,
+        ]);
+
+        if (is_wp_error($new_post_id)) {
+            error_log("❌ Error creating institute: " . $new_post_id->get_error_message());
+            return;
+        }
+
+        error_log("✅ Institute created with ID: " . $new_post_id);
+        
+        // Update ACF fields if available
+        if (function_exists('update_field')) {
+            update_field('address', $address, $new_post_id);
+            update_field('suburbtown', $suburb, $new_post_id);
+            update_field('state', $state, $new_post_id);
+            update_field('postcode', $postcode, $new_post_id);
+            error_log("📌 ACF fields updated");
+        }
+        
+        update_user_meta($user_id, 'institute_id', $new_post_id);
+    } elseif ($selected_institute) {
+        error_log("🏛 Using existing institute: " . $selected_institute);
+        update_user_meta($user_id, 'institute_id', $selected_institute);
+    } else {
+        error_log("🚫 No institute selected or created");
+        delete_user_meta($user_id, 'institute_id');
+    }
+
+    update_user_meta($user_id, '_institute_saved', true);
+    error_log("🎉 Institute process completed for user: " . $user_id);
+}
+add_action('pmpro_after_checkout', 'save_selected_or_new_institute_on_checkout', 10);
+
+
+add_action('save_post_institute', function($post_ID, $post, $update) {
+    if (empty($post->post_title) && !$update) {
+        error_log("🛑 Empty institute post created with ID: $post_ID");
+
+        // Show where it was called from
+        ob_start();
+        debug_print_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 10);
+        $trace = ob_get_clean();
+        error_log("🔍 Backtrace:\n" . $trace);
+    }
+}, 10, 3);
+
+add_filter('wp_insert_post_data', function($data, $postarr) {
+    if ($data['post_type'] === 'institute' && $data['post_status'] === 'publish') {
+        $is_empty = empty(trim($data['post_title'])) && empty(trim($data['post_content']));
+        if ($is_empty) {
+            error_log("🚫 Blocking empty institute post from being published.");
+            $data['post_status'] = 'draft'; // Or set to 'trash'
+        }
+    }
+    return $data;
+}, 10, 2);
+
+
+function clear_institute_saved_flag($user_id) {
+    delete_user_meta($user_id, '_institute_saved');
+}
+add_action('pmpro_before_change_membership_level', 'clear_institute_saved_flag');
+
+add_action('pmpro_after_checkout', 'debug_checkout_hook', 5); // Higher priority to run first
+function debug_checkout_hook($user_id) {
+    error_log("🔥 pmpro_after_checkout hook fired for user: " . $user_id);
+    error_log("🔥 POST data: " . print_r($_POST, true));
+}
+
+
+add_action('init', function() {
+    error_log("🔌 Hook check: pmpro_after_checkout has save_selected_or_new_institute_on_checkout: " . 
+        (has_action('pmpro_after_checkout', 'save_selected_or_new_institute_on_checkout') ? 'Yes' : 'No'));
+});
+
+function enqueue_select2_assets() {
+    // Only load on PMPro checkout page
+    if (is_page('membership-checkout')) {
+        wp_enqueue_style('select2-css', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css');
+        wp_enqueue_script('select2-js', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js', ['jquery'], null, true);
+        
+        // Inline init script
+wp_add_inline_script('select2-js', "
+    jQuery(document).ready(function($) {
+        $('#selected_institute, #new_institute_state').select2({
+            placeholder: '--Select--',
+            allowClear: true,
+            width: '100%'
+        });
+    });
+");
+    }
+}
+add_action('wp_enqueue_scripts', 'enqueue_select2_assets');
+
+
+/* ------------------ NEW GTA AUTO-GENERATION + EMAIL CHANGE LOG ------------------ */
+
+// Auto-generate GTA number on user registration
+function generate_unique_gta_number($user_id) {
+    if (get_user_meta($user_id, 'gta_number', true)) {
+        return; // Already set
+    }
+
+    $year = date('Y');
+    $counter = (int) get_option("gta_number_counter_$year", 0);
+    $counter++;
+
+    $gta_number = sprintf('GTA-%s-%05d', $year, $counter);
+    update_user_meta($user_id, 'gta_number', $gta_number);
+    update_option("gta_number_counter_$year", $counter);
+}
+
+add_action('user_register', 'generate_unique_gta_number');
+add_action('pmpro_after_checkout', 'generate_unique_gta_number');
+
+
+// Track email change and log it with GTA number
+add_action('profile_update', 'log_user_email_change', 20, 2);
+function log_user_email_change($user_id, $old_user_data) {
+    $old_email = $old_user_data->user_email;
+    $new_email = get_userdata($user_id)->user_email;
+
+    if ($old_email !== $new_email) {
+        $gta = get_user_meta($user_id, 'gta_number', true);
+        $logs = get_option('gta_email_change_log', []);
+        $logs[] = [
+            'user_id' => $user_id,
+            'gta_number' => $gta,
+            'old_email' => $old_email,
+            'new_email' => $new_email,
+            'changed_at' => current_time('mysql')
+        ];
+        update_option('gta_email_change_log', $logs);
+    }
+}
+
+// Admin menu for email change logs
+add_action('admin_menu', 'gta_log_admin_menu');
+function gta_log_admin_menu() {
+    add_menu_page('GTA Email Logs', 'GTA Logs', 'manage_options', 'gta-email-log', 'render_gta_email_log_page');
+}
+
+add_action('show_user_profile', 'show_user_email_institute_log');
+add_action('edit_user_profile', 'show_user_email_institute_log');
+
+function show_user_email_institute_log($user) {
+    $history = get_user_meta($user->ID, 'email_institute_history', true);
+    $gta_number = get_user_meta($user->ID, 'gta_number', true);
+
+    echo '<h3>Email & Institute Change History</h3>';
+
+    if (!is_array($history) || empty($history)) {
+        echo "<p>No change history found.</p>";
+        return;
+    }
+
+    echo '<table class="widefat striped"><thead><tr>
+            <th>Date</th>
+            <th>GTA Number</th>
+            <th>Email</th>
+            <th>Institute</th>
+        </tr></thead><tbody>';
+
+    foreach ($history as $entry) {
+        $old = esc_html($entry['old_email'] ?? '');
+        $new = esc_html($entry['new_email'] ?? '');
+        $institute_old = get_the_title($entry['old_institute'] ?? '') ?: '-';
+        $institute_new = get_the_title($entry['new_institute'] ?? '') ?: '-';
+        $date = esc_html($entry['date']);
+
+        echo "<tr>
+            <td>{$date}</td>
+            <td>{$gta_number}</td>
+            <td><strong>{$old}</strong> → {$new}</td>
+            <td><strong>{$institute_old}</strong> → {$institute_new}</td>
+        </tr>";
+    }
+
+    echo '</tbody></table>';
+}
+
+
+// Save previous email and institute history before profile update
+add_action('profile_update', function ($user_id, $old_user_data) {
+    $user = get_userdata($user_id);
+    $current_email = $user->user_email;
+    $old_email = $old_user_data->user_email;
+
+    $current_institute = get_user_meta($user_id, 'institute_id', true);
+    $old_institute = get_user_meta($user_id, '_old_institute_id', true);
+
+    $history = get_user_meta($user_id, 'email_institute_history', true);
+    if (!is_array($history)) {
+        $history = [];
+    }
+
+    // Only log if email or institute changed
+    if ($old_email !== $current_email || $old_institute != $current_institute) {
+        $history[] = [
+            'date' => current_time('mysql'),
+            'old_email' => $old_email,
+            'new_email' => $current_email,
+            'old_institute' => $old_institute,
+            'new_institute' => $current_institute,
+        ];
+        update_user_meta($user_id, 'email_institute_history', $history);
+        update_user_meta($user_id, '_old_institute_id', $current_institute); // store for future comparison
+    }
+}, 10, 2);
+
+// On new user registration or first time institute save, store the initial institute
+add_action('user_register', function ($user_id) {
+    $institute_id = get_user_meta($user_id, 'institute_id', true);
+    if ($institute_id) {
+        update_user_meta($user_id, '_old_institute_id', $institute_id);
+    }
+});
+
+
+add_filter('pmpro_confirmation_message', 'custom_invoice_confirmation_message', 10, 2);
+function custom_invoice_confirmation_message($message, $invoice) {
+    if (isset($_REQUEST['gateway']) && $_REQUEST['gateway'] === 'invoice') {
+        $message = "<p>Thank you! Your request has been submitted and an invoice has been sent. We'll activate your membership after payment is confirmed.</p>";
+    }
+    return $message;
+}
+
+
+add_filter('pmpro_required_billing_fields', function($fields) {
+    if (!empty($_REQUEST['gateway']) && $_REQUEST['gateway'] === 'invoice') {
+        // Remove only fields required for payment processing
+        $skip_fields = ['CardType', 'AccountNumber', 'ExpirationMonth', 'ExpirationYear', 'CVV'];
+        foreach ($skip_fields as $field) {
+            unset($fields[$field]);
+        }
+    }
+    return $fields;
+});
+
+
+// Force level as paid but allow invoice processing
+add_filter('pmpro_registration_checks', 'custom_pmpro_invoice_logic');
+function custom_pmpro_invoice_logic($okay) {
+    if (!empty($_REQUEST['gateway']) && $_REQUEST['gateway'] === 'invoice') {
+        $_REQUEST['gateway'] = 'check'; // or 'manual'
+        $_POST['gateway'] = 'check';
+    }
+    return $okay;
+}
+
+// add_action('pmpro_after_checkout', 'custom_send_invoice_email_after_checkout', 10, 2);
+// function custom_send_invoice_email_after_checkout($user_id, $morder) {
+//     if (!isset($_REQUEST['gateway']) || $_REQUEST['gateway'] !== 'invoice') return;
+
+//     $user = get_userdata($user_id);
+//     $email = $user->user_email;
+//     $gta = get_user_meta($user_id, 'gta_number', true);
+
+//     $subject = "Invoice for Membership – GTA #" . $gta;
+//     $message = "Hello " . $user->first_name . ",\n\n";
+//     $message .= "Thank you for choosing to register via Invoice.\n\n";
+//     $message .= "Your GTA Number: $gta\n";
+//     $message .= "Membership Level: " . $morder->membership_name . "\n";
+//     $message .= "Amount Due: " . pmpro_formatPrice($morder->total) . "\n";
+//     $message .= "Date: " . date('Y-m-d H:i:s') . "\n\n";
+//     $message .= "Please submit payment to:\n";
+//     $message .= "[Add your payment instructions here]\n\n";
+//     $message .= "Thank you,\n" . get_bloginfo('name');
+
+//     wp_mail($email, $subject, $message);
+// }
+
+// add_action('pmpro_after_checkout', 'custom_send_invoice_email_after_checkout', 10, 2);
+// function custom_send_invoice_email_after_checkout($user_id, $morder) {
+//     if (!isset($_REQUEST['gateway']) || $_REQUEST['gateway'] !== 'invoice') return;
+
+//     $user = get_userdata($user_id);
+//     $email = $user->user_email;
+//     $gta = get_user_meta($user_id, 'gta_number', true);
+
+//     $subject = "Invoice for Membership – GTA #" . $gta;
+
+//     $message = '
+//     <p>Dear ' . esc_html($user->first_name) . ',</p>
+
+//     <p>Thank you for registering to become a GTA NSW & ACT member and welcome to our new website.</p>
+
+//     <p>Your membership will be enabled once we have received and cleared payment. Then you will be able to log in and access your dashboard, resources, and other member benefits.</p>
+
+//     <p>Your invoice, if you haven’t received it already, will be emailed shortly. Please contact the team at <a href="mailto:admin@gtanswact.org.au">admin@gtanswact.org.au</a> if you have any concerns.</p>
+
+//     <p>Kind regards,</p>
+
+//     <p>
+//     Diana Gearside<br>
+//     Executive Officer<br>
+//     Mobile: 0474 278 349<br>
+//     Phone: 02 9052 6451<br>
+//     <a href="https://www.gtanswact.org.au">https://www.gtanswact.org.au</a><br>
+//     <a href="https://www.facebook.com/gtanswact">https://www.facebook.com/gtanswact</a>
+//     </p>
+
+//     <p style="text-align: center; margin-top: 30px;">
+//         <img src="https://www.gtanswact.org.au/wp-content/uploads/2024/10/logo_10.png" alt="GTA NSW & ACT" style="max-width: 200px; height: auto;">
+//     </p>
+//     ';
+
+//     wp_mail($email, $subject, $message, array('Content-Type: text/html; charset=UTF-8'));
+// }
+
+
+
+add_filter('pmpro_gateways', function($gateways) {
+    $gateways['check'] = 'Pay by Invoice';
+    return $gateways;
+});
+
+add_filter('pmpro_valid_gateways', function($valid_gateways) {
+    if (!in_array('check', $valid_gateways)) {
+        $valid_gateways[] = 'check';
+    }
+    return $valid_gateways;
+});
+
+// Set gateway dynamically based on user selection
+add_filter('pmpro_checkout_default_gateway', function($gateway) {
+    if (!empty($_REQUEST['gateway']) && $_REQUEST['gateway'] === 'invoice') {
+        return 'check';
+    }
+    return $gateway;
+});
+
+// Adjust required billing fields (avoid removing necessary internal fields)
+add_filter('pmpro_required_billing_fields', function($fields) {
+    if (!empty($_REQUEST['gateway']) && $_REQUEST['gateway'] === 'invoice') {
+        // Skip only card-specific fields
+        unset($fields['CardType'], $fields['AccountNumber'], $fields['ExpirationMonth'], $fields['ExpirationYear'], $fields['CVV']);
+    }
+    return $fields;
+});
+
+
+if (!function_exists('send_pending_welcome_email')) {
+    function send_pending_welcome_email($member) {
+        wp_mail(
+            $member['email'],
+            'Welcome to GTA Membership',
+            '
+            <p>Dear ' . esc_html($member['first_name']) . ',</p>
+
+            <p>Thank you for registering to become a GTA NSW & ACT member and welcome to our new website.</p>
+
+            <p>Your membership will be enabled once we have received and cleared payment. Then you will be able to log in and access your dashboard, resources, and other member benefits.</p>
+
+            <p>Your invoice, if you haven’t received it already, will be emailed shortly. Please contact the team at <a href="mailto:admin@gtanswact.org.au">admin@gtanswact.org.au</a> if you have any concerns.</p>
+
+            <p>Kind regards,</p>
+
+            <p>
+            Diana Gearside<br>
+            Executive Officer<br>
+            Mobile: 0474 278 349<br>
+            Phone: 02 9052 6451<br>
+            <a href="https://www.gtanswact.org.au">https://www.gtanswact.org.au</a><br>
+            <a href="https://www.facebook.com/gtanswact">https://www.facebook.com/gtanswact</a>
+            </p>
+
+            <p style="text-align: left; margin-top: 30px;">
+                <img src="https://www.gtanswact.org.au/wp-content/uploads/2024/10/logo_10.png" alt="GTA NSW & ACT" style="max-width: 200px; height: auto;">
+            </p>
+            ',
+            array('Content-Type: text/html; charset=UTF-8')
+        );
+    }
+}
+
+add_action('pmpro_after_checkout', function($user_id) {
+    if ((defined('DOING_AJAX') && DOING_AJAX) || (is_admin() && !defined('DOING_CRON'))) {
+        return;
+    }
+
+    if (isset($_REQUEST['gateway']) && $_REQUEST['gateway'] === 'check') {
+    $order = new MemberOrder();
+    $order->getLastMemberOrder($user_id);
+
+    if (!empty($order->id)) {
+        $order->gateway = 'check';
+        $order->subscription_transaction_id = 'CHECK' . strtoupper($order->code);
+        $order->status = 'pending'; // set pending BEFORE emails are sent
+        $order->saveOrder();
+    }
+    }
+
+    if (!empty($_POST['additional_members'])) {
+        update_user_meta($user_id, 'additional_members', $_POST['additional_members']);
+    } else {
+        return;
+    }
+
+    $parent_order = (!empty($order) && !empty($order->id)) ? $order : new MemberOrder();
+    $parent_order->getLastMemberOrder($user_id);
+
+    $level_id = $parent_order->membership_id;
+    $level = pmpro_getLevel($level_id);
+    $parent_institute_id = get_user_meta($user_id, 'institute_id', true);
+    $payment_method = get_user_meta($user_id, 'payment_method', true);
+
+    $sub_order_ids = [];
+
+    foreach ($_POST['additional_members'] as $member) {
+        $username = sanitize_user($member['email']);
+        $password = wp_generate_password();
+
+        $sub_user_id = wp_insert_user([
+            'user_login' => $username,
+            'user_pass'  => $password,
+            'user_email' => sanitize_email($member['email']),
+            'first_name' => sanitize_text_field($member['first_name']),
+            'last_name'  => sanitize_text_field($member['last_name']),
+            'role'       => 'subscriber'
+        ]);
+
+        if (is_wp_error($sub_user_id)) continue;
+
+        pmpro_changeMembershipLevel([
+            'user_id' => $sub_user_id,
+            'membership_id' => $level_id,
+            'startdate' => current_time('mysql')
+        ], $sub_user_id);
+
+        $sub_order = new MemberOrder();
+        $sub_order->user_id = $sub_user_id;
+        $sub_order->membership_id = $level_id;
+        $sub_order->gateway = $parent_order->gateway;
+        $sub_order->payment_type = 'Sub-member';
+        $sub_order->InitialPayment = 0;
+        $sub_order->status = ($parent_order->gateway == 'check') ? 'pending' : 'success';
+        $sub_order->subscription_transaction_id = 'submember_' . strtoupper(wp_generate_password(8, false));
+        $sub_order->notes = 'Linked to parent order ID: ' . $parent_order->id;
+        $sub_order->saveOrder();
+
+        if (!empty($sub_user_id) && !is_wp_error($sub_user_id) && !empty($sub_order->id)) {
+            try {
+                $sub_user = get_userdata($sub_user_id);
+                if ($sub_user) {
+                    $email = new PMProEmail();
+                    $email->sendCheckoutEmail($sub_user, $sub_order);
+                    error_log("✅ PMPro checkout email sent to sub-member ID: $sub_user_id");
+                } else {
+                    error_log("❌ Failed to get WP_User object for ID: $sub_user_id");
+                }
+            } catch (Throwable $e) {
+                error_log("💥 Email error for sub-member: " . $e->getMessage());
+            }
+        }
+
+        $sub_order_ids[] = $sub_order->id;
+
+        update_user_meta($sub_user_id, 'institute_id', $parent_institute_id);
+        update_user_meta($sub_user_id, 'assigned_institutes', get_user_meta($user_id, 'assigned_institutes', true));
+        update_user_meta($sub_user_id, 'payment_method', $payment_method);
+        update_user_meta($sub_user_id, 'is_sub_member', true);
+        update_user_meta($sub_user_id, 'parent_member_id', $user_id);
+        update_user_meta($sub_user_id, 'parent_order_id', $parent_order->id);
+
+        $terms = wp_get_object_terms($user_id, 'institute', ['fields' => 'ids']);
+        if (!empty($terms) && !is_wp_error($terms)) {
+            wp_set_object_terms($sub_user_id, $terms, 'institute');
+        }
+
+    }
+
+    if (!empty($sub_order_ids)) {
+        update_pmpro_membership_order_meta($parent_order->id, 'sub_member_orders', $sub_order_ids);
+    }
+});
+
+
+
+add_action('pmpro_updated_order', function($order) {
+    if (empty($order) || empty($order->id)) return;
+    
+    if ($order->status === 'success') {
+        if (!pmpro_hasMembershipLevel($order->membership_id, $order->user_id)) {
+            pmpro_changeMembershipLevel($order->membership_id, $order->user_id);
+        }
+    }
+
+    // Get any sub-member orders linked
+    $sub_order_ids = get_pmpro_membership_order_meta($order->id, 'sub_member_orders', true);
+
+    if (!empty($sub_order_ids) && is_array($sub_order_ids)) {
+        foreach ($sub_order_ids as $sub_order_id) {
+            $sub_order = new MemberOrder($sub_order_id);
+
+            // Sync status
+            $sub_order->status = $order->status;
+            $sub_order->saveOrder();
+        }
+    }
+});
+
+
+function custom_pmpro_add_status_column( $columns ) {
+    $columns['order_status'] = __('Payment Status', 'paid-memberships-pro');
+    return $columns;
+}
+
+
+add_filter( 'pmpro_manage_memberslist_columns', 'custom_pmpro_add_status_column' );
+function custom_pmpro_fill_status_column( $column_name, $user_id ) {
+    if ( 'order_status' === $column_name ) {
+        $order = new MemberOrder();
+        $order->getLastMemberOrder($user_id);
+        if (!empty($order->id)) {
+            echo esc_html(ucfirst($order->status));
+        } else {
+            echo '<span style="color:red;">Pending</span>';
+        }
+    }
+}
+
+
+add_action( 'pmpro_manage_memberslist_custom_column', 'custom_pmpro_fill_status_column', 10, 2 );
+function custom_pmpro_export_order_status($user) {
+    $order = new MemberOrder();
+    $order->getLastMemberOrder($user->ID);
+    return !empty($order->id) ? $order->status : 'none';
+}
+
+add_filter('pmpro_members_list_csv_extra_columns', function($cols) {
+    $cols['order_status'] = 'custom_pmpro_export_order_status';
+    return $cols;
+});
+
+add_action('pmpro_account_bullets_bottom', 'show_gta_number_in_account');
+function show_gta_number_in_account() {
+    $user_id = get_current_user_id();
+    $gta = get_user_meta($user_id, 'gta_number', true);
+
+    if (!empty($gta)) {
+        echo '<li class="pmpro_list_item"><strong>GTA Number:</strong> ' . esc_html($gta) . '</li>';
+    }
+}
+
+
+
+
+
+add_filter('pmpro_orders_subscriptions', function($subscriptions) {
+    foreach ($subscriptions as &$sub) {
+        if (strpos($sub['subscription_transaction_id'], 'submember_') === 0) {
+            $sub['subscription_error'] = ''; // Suppress error text
+        }
+    }
+    return $subscriptions;
+});
+
+add_filter('pmpro_subscriptions_page_subscription_id', function($id, $subscription) {
+    if (strpos($id, 'submember_') === 0) {
+        return 'Sub-member (no sync)';
+    }
+    return $id;
+}, 10, 2);
+
+
+
+// function send_login_email_to_sub_member($user_id, $plain_password) {
+//     $user = get_userdata($user_id);
+//     $login_url = wp_login_url();
+//     $to = $user->user_email;
+//     $subject = 'Your GTA Sub-Member Account Details';
+//     $message = "Hi {$user->first_name},\n\n"
+//         . "Your sub-member account has been created.\n"
+//         . "Login URL: {$login_url}\n"
+//         . "Username: {$user->user_email}\n"
+//         . "Password: {$plain_password}\n\n"
+//         . "You may change your password after logging in.\n\n"
+//         . "Regards,\nGTA Team";
+
+//     wp_mail($to, $subject, $message);
+// }
+
+
+add_filter('pmpro_registration_checks', function($okay) {
+    if (!$okay) return $okay;
+
+    $level_id = intval($_REQUEST['pmpro_level'] ?? 0);
+    $additional_members = $_POST['additional_members'] ?? [];
+
+    // Updated limits per level
+    $limits = [
+        1 => 0,  // Personal/Concession (no sub-members)
+        2 => 4,  // 7 - 12
+        3 => 9,  // K - 12
+        4 => 4,  // K - 6
+        5 => 1   // Corporate
+    ];
+
+    $allowed = $limits[$level_id] ?? 0;
+    $requested = is_array($additional_members) ? count($additional_members) : 0;
+
+    if ($requested > $allowed) {
+        global $pmpro_msg, $pmpro_msgt;
+        $pmpro_msg = "You're allowed to add a maximum of {$allowed} additional member(s) with this membership level.";
+        $pmpro_msgt = "pmpro_error";
+        return false;
+    }
+
+    return $okay;
+});
+
+add_filter('gettext', function($translated_text, $text, $domain) {
+    if ($domain === 'paid-memberships-pro' && $text === 'My Account') {
+        return 'Dashboard';
+    }
+    return $translated_text;
+}, 10, 3);
+
+add_filter('gettext', function($translated_text, $text, $domain) {
+    if ($domain === 'paid-memberships-pro') {
+        if ($text === 'My Memberships') {
+            return 'My Membership';
+        }
+    }
+    return $translated_text;
+}, 10, 3);
+
+
+// Log out after checkout
+// add_action('pmpro_after_checkout', function($user_id){
+//     wp_logout();
+// });
+
+// // Redirect to login page after checkout
+// add_filter('pmpro_redirect_after_checkout', function($redirect_url, $user_id){
+//     return wp_login_url();
+// }, 10, 2);
+
+add_filter('gettext', function($translated_text, $text, $domain) {
+    if ($translated_text === 'Lost Password?') {
+        return 'Forgot Password?';
+    }
+    return $translated_text;
+}, 20, 3);
+
+function top_buttons_shortcode() {
+    ob_start();
+    ?>
+    <div style="display: flex; gap: 10px; align-items: center;">
+        <?php if ( is_user_logged_in() ) : ?>
+            <a class="top-buttons" href="https://www.gtanswact.org.au/membership-account/">Dashboard</a>
+            <a class="top-buttons" href="<?php echo esc_url( wp_logout_url( home_url() ) ); ?>">Logout</a>
+        <?php else : ?>
+            <a class="top-buttons" href="/login">Login</a>
+            <a class="top-buttons" href="https://www.gtanswact.org.au/membership/membership-join/">Register</a>
+        <?php endif; ?>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+add_shortcode('top_buttons', 'top_buttons_shortcode');
+
+// Hide admin bar for subscribers
+add_action( 'after_setup_theme', function () {
+
+  if ( ! current_user_can( 'edit_posts' ) && ! is_admin() ) {
+    show_admin_bar( false );
+  }
+
+} );
+
+
+// Change the 'From' email address.
+add_filter('wp_mail_from', function($email) {
+    return 'admin@gtanswact.org.au';  // 👈 your desired "from" email
+});
+
+// Change the 'From' name.
+add_filter('wp_mail_from_name', function($name) {
+    return 'GTA NSW & ACT';  // 👈 your desired sender name
+});
+
+// add_action('pmpro_after_checkout', function($user_id, $morder) {
+//     $user = get_userdata($user_id);
+//     $email = $user->user_email;
+//     $gateway = $_REQUEST['gateway'] ?? '';
+//     $admin_emails = array(
+//         'judith@hots.com.au' );
+
+//     $gta = get_user_meta($user_id, 'gta_number', true);
+//     $membership_level = $morder->membership_name;
+//     $order_date = date('d F Y');
+//     $membership_type = $membership_level;
+//     $school_name = get_field('new_institute_name', 'user_' . $user_id);
+//     $school_address = get_field('new_institute_address', 'user_' . $user_id) . ', ' .
+//                       get_field('new_institute_suburbtown', 'user_' . $user_id) . ' ' .
+//                       get_field('new_institute_state', 'user_' . $user_id) . ' ' .
+//                       get_field('new_institute_postcode', 'user_' . $user_id);
+
+//     // Fetch sub-members
+//     $sub_members = get_user_meta($user_id, 'additional_members', true);
+
+//     // Prepare sub-member list HTML
+//     $sub_members_list = '';
+//     if (!empty($sub_members) && is_array($sub_members)) {
+//         $i = 1;
+//         foreach ($sub_members as $sub) {
+//             $sub_members_list .= $i . '. Name: ' . esc_html($sub['first_name']) . ' ' . esc_html($sub['last_name']) . ', Email: ' . esc_html($sub['email']) . '<br>';
+//             $i++;
+//         }
+//     } else {
+//         $sub_members_list = 'No sub-members added.';
+//     }
+
+  
+   
+
+// //     // =========== 3️⃣ ADMIN NOTIFICATION (for both) ===========
+//     $admin_subject = "GTA NSW & ACT – New Membership Registration";
+//     $admin_message = '
+//     Hi Admin,<br><br>
+//     GTA new member registration details below:<br><br>
+//     Name: ' . esc_html($user->first_name . ' ' . $user->last_name) . '<br>
+//     Email: ' . esc_html($email) . '<br>
+//     School: ' . esc_html($school_name) . '<br>
+//     Address: ' . esc_html($school_address) . '<br><br>
+//     ' . $sub_members_list . '<br><br>
+//     Date: ' . $order_date . '<br>
+//     Subscription for: ' . esc_html($membership_level) . '<br>
+//     Membership Type: ' . esc_html($membership_type) . '<br>
+//     Expires: 31 Dec ' . date('Y') . ' (auto-adjust based on registration year)<br>
+//     Payment Type: ' . ucfirst($gateway) . '<br><br>
+//     Regards,<br>
+//     GTA NSW & ACT
+//     ';
+
+//     foreach ($admin_emails as $admin_email) {
+//         wp_mail($admin_email, $admin_subject, $admin_message, array('Content-Type: text/html; charset=UTF-8'));
+//     }
+// }, 20, 2);
+
+
+add_action('pmpro_after_checkout', function($user_id, $morder) {
+    $user = get_userdata($user_id);
+    $email = $user->user_email; // main user's email
+    $gateway = $_REQUEST['gateway'] ?? '';
+    $admin_emails = array('judith@hotswots.com', 'events@gtanswact.org.au');
+
+    $gta = get_user_meta($user_id, 'gta_number', true);
+    $membership_level = $morder->membership_name;
+    $order_date = date('d F Y');
+    $membership_type = $membership_level;
+
+    $institute_id = get_user_meta($user_id, 'institute_id', true);
+    $school_name = $institute_id ? get_the_title($institute_id) : '';
+
+    $line1     = get_field('address', $institute_id);
+    $suburb    = get_field('suburbtown', $institute_id);
+    $state_raw = get_field('state', $institute_id);
+    $postcode  = get_field('postcode', $institute_id);
+
+    $line1    = is_string($line1) ? trim($line1) : '';
+    $suburb   = is_string($suburb) ? trim($suburb) : '';
+    $postcode = is_string($postcode) ? trim($postcode) : '';
+    $state_raw = is_string($state_raw) ? $state_raw : '';
+
+    $state_clean = preg_replace('/\s*\(.*?\)/', '', $state_raw);
+    $state_clean = trim($state_clean);
+
+    $state_map = [
+        'New South Wales'             => 'NSW',
+        'Victoria'                    => 'VIC',
+        'Queensland'                  => 'QLD',
+        'South Australia'             => 'SA',
+        'Western Australia'           => 'WA',
+        'Tasmania'                    => 'TAS',
+        'Australian Capital Territory'=> 'ACT',
+        'Northern Territory'          => 'NT',
+    ];
+    $state = isset($state_map[$state_clean]) ? $state_map[$state_clean] : strtoupper($state_clean);
+    $line2 = trim("{$suburb} {$state} {$postcode}");
+    $school_address = esc_html($line1) . '<br>' . esc_html($line2);
+
+    $additional_members = get_user_meta($user_id, 'additional_members', true);
+    if (!is_array($additional_members)) {
+        $additional_members = array();
+    }
+
+    $sub_members_html = '';
+if (!empty($additional_members)) {
+    $sub_members_html .= '<h3>Sub Members Details (If there are any):</h3><ul>';
+    foreach ($additional_members as $index => $sub) {
+        $first_name = isset($sub['first_name']) ? trim($sub['first_name']) : '';
+        $last_name  = isset($sub['last_name']) ? trim($sub['last_name']) : '';
+        $sub_email  = isset($sub['email']) ? trim($sub['email']) : '';
+
+        // Find sub-user by email
+        $sub_user = get_user_by('email', $sub_email);
+        $sub_gta = $sub_user ? get_user_meta($sub_user->ID, 'gta_number', true) : '';
+
+        if (!empty($first_name) || !empty($last_name) || !empty($sub_email)) {
+            $full_name = trim($first_name . ' ' . $last_name);
+            $sub_members_html .= '<li><strong>' . ($index + 1) . '. Name:</strong> ' . esc_html($full_name) .
+                                 ', <strong>Email:</strong> ' . esc_html($sub_email) .
+                                 (!empty($sub_gta) ? ', ' . esc_html($sub_gta) : '') .
+                                 '</li>';
+        }
+    }
+    $sub_members_html .= '</ul>';
+} else {
+    $sub_members_html = '<p><em>No sub-members were registered.</em></p>';
+}
+
+
+    $logo_url = 'https://www.gtanswact.org.au/wp-content/uploads/2024/10/logo_10.png';
+    $payment_type_text = strtolower($gateway) === 'check' ? 'Electronic Funds Transfer' : 'Credit Card';
+
+    $admin_subject = 'GTA NSW & ACT – New Membership Registration';
+    $admin_message = '
+        <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
+            <p>Hi Admin,</p>
+            <p><strong>GTA new member registration details below:</strong></p>
+            <table cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+                <tr>
+                    <td style="border: 1px solid #ddd;"><strong>Name:</strong></td>
+                    <td style="border: 1px solid #ddd;">' . esc_html($user->first_name . ' ' . $user->last_name) . '</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #ddd;"><strong>Email:</strong></td>
+                    <td style="border: 1px solid #ddd;">' . esc_html($email) . '</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #ddd;"><strong>GTA Number:</strong></td>
+                    <td style="border: 1px solid #ddd;">' . esc_html($gta) . '</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #ddd;"><strong>School:</strong></td>
+                    <td style="border: 1px solid #ddd;">' . esc_html($school_name) . '</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #ddd;"><strong>Address:</strong></td>
+                    <td style="border: 1px solid #ddd;">' . $school_address . '</td>
+                </tr>
+            </table>
+
+            <br>
+            ' . $sub_members_html . '
+            <br>
+
+            <table cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+                <tr>
+                    <td style="border: 1px solid #ddd;"><strong>Date:</strong></td>
+                    <td style="border: 1px solid #ddd;">' . esc_html($order_date) . '</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #ddd;"><strong>Subscription for:</strong></td>
+                    <td style="border: 1px solid #ddd;">' . date('Y') . ' Membership</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #ddd;"><strong>Membership Type:</strong></td>
+                    <td style="border: 1px solid #ddd;">' . esc_html($membership_type) . '</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #ddd;"><strong>Expires:</strong></td>
+                    <td style="border: 1px solid #ddd;">31 Dec ' . date('Y') . '</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #ddd;"><strong>Payment Type:</strong></td>
+                    <td style="border: 1px solid #ddd;">' . esc_html($payment_type_text) . '</td>
+                </tr>
+            </table>
+
+            <br>
+            <p>Regards,<br>
+            <strong>GTA NSW & ACT</strong></p>
+
+            <div style="margin-top: 30px; text-align: left;">
+                <img src="' . esc_url($logo_url) . '" alt="GTA NSW & ACT" style="max-width: 200px; height: auto;">
+            </div>
+        </div>
+    ';
+
+    foreach ($admin_emails as $admin_email) {
+        wp_mail($admin_email, $admin_subject, $admin_message, array('Content-Type: text/html; charset=UTF-8'));
+    }
+}, 20, 2);
+
+
+
+
+// add_action('template_redirect', function() {
+//     if (is_page('membership-confirmation') && is_user_logged_in()) {
+//         wp_logout();
+//     }
+// });
+
+add_action('template_redirect', function() {
+    if (is_page('membership-confirmation') && is_user_logged_in()) {
+        $user_id = get_current_user_id();
+
+        $order = get_last_pending_order_for_user($user_id);
+
+        // Check gateway (adjust 'check' or 'invoice' as needed)
+        if ($order && in_array($order->gateway, ['check', 'invoice']) && $order->status === 'pending') {
+            error_log('DEBUG: Pending invoice/check order detected! Redirecting...');
+            wp_redirect(home_url('/?registered=1'));
+            exit;
+        }
+    }
+});
+
+// Helper function (add this to your functions.php)
+function get_last_pending_order_for_user($user_id) {
+    global $wpdb;
+    $order_id = $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT id FROM {$wpdb->pmpro_membership_orders} WHERE user_id = %d AND status = 'pending' ORDER BY timestamp DESC LIMIT 1",
+            $user_id
+        )
+    );
+    if ($order_id) {
+        $order = new MemberOrder($order_id);
+        return $order;
+    }
+    return false;
+}
+
+
+add_filter('password_hint', function($hint) {
+    return 'Your password must be at least 8 characters and include a number.';
+});
+
+// Redirect admin users to home page after login.
+function gta_custom_login_redirect($redirect_to, $request, $user) {
+    // Check if a user object is present and is an admin.
+    if (isset($user->roles) && is_array($user->roles)) {
+        if (in_array('administrator', $user->roles)) {
+            return home_url();  // You can replace this with any custom URL.
+        }
+    }
+    return $redirect_to; // For others, keep the default behavior.
+}
+add_filter('login_redirect', 'gta_custom_login_redirect', 10, 3);
+
+add_action('template_redirect', function() {
+    if (is_user_logged_in()) {
+        // Check for ?registered=1, skip logout on this request
+        if (isset($_GET['registered']) && $_GET['registered'] == '1') {
+            return;
+        }
+        $user_id = get_current_user_id();
+        $membership_level = pmpro_getMembershipLevelForUser($user_id);
+
+        $order = new MemberOrder();
+        $order->getLastMemberOrder($user_id);
+
+        if ($membership_level && $order && $order->status === 'pending') {
+            wp_logout();
+            wp_redirect(home_url('/'));
+            exit;
+        }
+    }
+});
+
+
+add_action('pmpro_after_membership_level_profile_fields', function($user) {
+    $contact = get_user_meta($user->ID, 'contact_number', true);
+    ?>
+    <tr>
+        <th><label for="contact_number">Contact Number</label></th>
+        <td>
+            <input type="text" name="contact_number" id="contact_number" value="<?php echo esc_attr($contact); ?>" class="regular-text" />
+        </td>
+    </tr>
+    <?php
+});
+
+add_action('profile_update', function($user_id) {
+    if (current_user_can('edit_user', $user_id) && isset($_POST['contact_number'])) {
+        update_user_meta($user_id, 'contact_number', sanitize_text_field($_POST['contact_number']));
+    }
+});
+
+
+// Send custom welcome emails based on payment method (paid or invoice/pending)
+add_action('pmpro_after_checkout', function ($user_id, $morder) {
+    if (!$morder instanceof MemberOrder || empty($morder->gateway)) {
+        $morder = new MemberOrder();
+        $morder->getLastMemberOrder($user_id);
+    }
+
+    $gateway = $morder->gateway ?? '';
+
+    if ($gateway === 'free') {
+        send_custom_pending_email($user_id);
+    } else {
+        send_custom_paid_email($user_id);
+    }
+
+    // Also email sub-members
+    $sub_members = get_user_meta($user_id, 'additional_members', true);
+    if (!empty($sub_members) && is_array($sub_members)) {
+        foreach ($sub_members as $member) {
+            $sub_email = sanitize_email($member['email']);
+            $sub_name = sanitize_text_field($member['first_name'] ?? '') . ' ' . sanitize_text_field($member['last_name'] ?? '');
+
+            if ($gateway === 'free') {
+                send_custom_pending_email(null, $sub_email, $sub_name);
+            } else {
+                send_custom_paid_email(null, $sub_email, $sub_name);
+            }
+        }
+    }
+}, 20, 2);
+
+function send_custom_pending_email($user_id = null, $override_email = '', $override_name = '') {
+    if ($user_id) {
+        $user = get_userdata($user_id);
+        $email = $user->user_email;
+        $first_name = $user->first_name;
+    } else {
+        $email = $override_email;
+        $first_name = $override_name;
+    }
+
+    $subject = 'Welcome to GTA NSW & ACT (Membership Pending)';
+    $message = 'Dear ' . esc_html($first_name) . ',<br><br>
+
+Thank you for registering to become a GTA NSW & ACT member.<br>
+Your membership will be enabled once we have received and cleared payment. Then you will be able to log in and access your dashboard, resources and other member benefits.<br><br>
+
+Your invoice, if you haven’t received it already, will be emailed shortly. Please contact the team at <a href="mailto:admin@gtanswact.org.au">admin@gtanswact.org.au</a> if you have any concerns.<br><br>
+
+Kind regards,<br>
+Diana Gearside<br>
+Executive Officer<br>
+Mobile: 0474 278 349<br>
+Phone: 02 9052 6451<br>
+<a href="https://www.gtanswact.org.au">https://www.gtanswact.org.au</a><br>
+<a href="https://www.facebook.com/gtanswact">https://www.facebook.com/gtanswact</a><br><br>
+<img src="https://www.gtanswact.org.au/wp-content/uploads/2024/10/logo_10.png" style="max-width: 180px; height: auto;">';
+
+    wp_mail($email, $subject, $message, array('Content-Type: text/html; charset=UTF-8'));
+}
+
+function send_custom_paid_email($user_id = null, $override_email = '', $override_name = '') {
+    if ($user_id) {
+        $user = get_userdata($user_id);
+        $email = $user->user_email;
+        $first_name = $user->first_name;
+    } else {
+        $email = $override_email;
+        $first_name = $override_name;
+    }
+
+    $login_url = 'https://www.gtanswact.org.au/login/';
+    $subject = 'Welcome to GTA NSW & ACT (Membership Confirmed)';
+
+    $message = 'Dear ' . esc_html($first_name) . ',<br><br>
+
+Thank you for becoming a GTA NSW & ACT member.<br>
+Your payment has been received and your membership is now active.<br><br>
+If you have sub-members, let them know they can log in using their email and reset their password via the Lost Password link.<br><br>
+
+<div style="border: 1px solid #ddd; background: #f9f9f9; padding: 15px;">
+<strong>Your Membership Info:</strong><br><br>
+<strong>Username:</strong> ' . esc_html($email) . '<br>
+<strong>Password:</strong> <em>(Set during registration or use \"Lost Password\" to reset)</em><br>
+<strong>Login URL:</strong> <a href="' . esc_url($login_url) . '">' . esc_html($login_url) . '</a><br>
+</div><br><br>
+
+Kind regards,<br>
+Diana Gearside<br>
+Executive Officer<br>
+Mobile: 0474 278 349<br>
+Phone: 02 9052 6451<br>
+<a href="https://www.gtanswact.org.au">https://www.gtanswact.org.au</a><br>
+<a href="https://www.facebook.com/gtanswact">https://www.facebook.com/gtanswact</a><br><br>
+<img src="https://www.gtanswact.org.au/wp-content/uploads/2024/10/logo_10.png" style="max-width: 180px; height: auto;">';
+
+    wp_mail($email, $subject, $message, array('Content-Type: text/html; charset=UTF-8'));
+}
+
+add_action('init', function() {
+    register_post_status('wc-dispatched', [
+        'label'                     => _x('Dispatched', 'Order status', 'woocommerce'),
+        'public'                    => true,
+        'exclude_from_search'       => false,
+        'show_in_admin_all_list'    => true,
+        'show_in_admin_status_list' => true,
+        'label_count'               => _n_noop('Dispatched <span class="count">(%s)</span>', 'Dispatched <span class="count">(%s)</span>'),
+    ]);
+});
+
+add_filter('wc_order_statuses', function($order_statuses) {
+    $new_order_statuses = [];
+
+    foreach ($order_statuses as $key => $status) {
+        $new_order_statuses[$key] = $status;
+
+        if ('wc-processing' === $key) {
+            $new_order_statuses['wc-dispatched'] = __('Dispatched', 'woocommerce');
+        }
+    }
+
+    return $new_order_statuses;
+});
+
+add_action('pmpro_add_member_fields', function () {
+    ?>
+    <tr class="pmpro_user_field pmpro_user_field-gta_member_type">
+        <th scope="row">
+            <label for="gta_member_type">GTA Member Role</label>
+        </th>
+        <td>
+            <select name="gta_member_type" id="gta_member_type">
+                <option value="">Select</option>
+                <option value="parent">Parent Member</option>
+                <option value="sub">Sub Member</option>
+            </select>
+            <p class="description">Select whether this member is a Parent or Sub Member.</p>
+        </td>
+    </tr>
+    <?php
+});
+
+add_action('pmpro_after_add_member', function ($user_id) {
+    if (!empty($_REQUEST['gta_member_type'])) {
+        update_user_meta($user_id, 'gta_member_type', sanitize_text_field($_REQUEST['gta_member_type']));
+    }
+});
+
+// Show field in Add/Edit User profile (admin)
+add_action('show_user_profile', 'gta_member_type_field');
+add_action('edit_user_profile', 'gta_member_type_field');
+add_action('user_new_form', 'gta_member_type_field'); // <-- for Add Member screen
+
+function gta_member_type_field($user) {
+    $selected = '';
+    if (is_object($user)) {
+        $selected = get_user_meta($user->ID, 'gta_member_type', true);
+    }
+
+    ?>
+    <h3>GTA Member Role</h3>
+    <table class="form-table">
+        <tr>
+            <th><label for="gta_member_type">Member Type</label></th>
+            <td>
+                <select name="gta_member_type" id="gta_member_type">
+                    <option value="">Select</option>
+                    <option value="parent" <?php selected($selected, 'parent'); ?>>Parent Member</option>
+                    <option value="sub" <?php selected($selected, 'sub'); ?>>Sub Member</option>
+                </select>
+                <p class="description">Specify if this member is a Parent or Sub Member.</p>
+            </td>
+        </tr>
+    </table>
+    <?php
+}
+add_action('personal_options_update', 'gta_member_type_save');
+add_action('edit_user_profile_update', 'gta_member_type_save');
+add_action('user_register', 'gta_member_type_save'); // <-- handles Add Member form
+
+function gta_member_type_save($user_id) {
+    if (isset($_POST['gta_member_type']) && current_user_can('edit_user', $user_id)) {
+        update_user_meta($user_id, 'gta_member_type', sanitize_text_field($_POST['gta_member_type']));
+    }
+}
+
+// Add dropdown on Add Member form
+add_action('pmpro_add_member_fields', function () {
+    ?>
+    <tr class="pmpro_user_field pmpro_user_field-membership_status">
+        <th scope="row">
+            <label for="membership_status">Membership Status</label>
+        </th>
+        <td>
+            <select name="membership_status" id="membership_status">
+                <option value="">Select Status</option>
+                <option value="success">Success</option>
+                <option value="pending">Pending</option>
+            </select>
+            <p class="description">Select whether the member status is confirmed or pending.</p>
+        </td>
+    </tr>
+    <?php
+});
+
+// Save to user meta temporarily during Add Member
+add_action('pmpro_after_add_member', function ($user_id) {
+    if (!empty($_REQUEST['membership_status'])) {
+        update_user_meta($user_id, '_pending_membership_status', sanitize_text_field($_REQUEST['membership_status']));
+    }
+});
+
+function update_order_status_from_custom_dropdown($level_id, $user_id) {
+    if (!empty($_REQUEST['membership_status'])) {
+        $status = sanitize_text_field($_REQUEST['membership_status']);
+        error_log("Updating order status for user $user_id to $status");
+
+        update_user_meta($user_id, 'membership_status', $status);
+
+        $order = new MemberOrder();
+        $order->getLastMemberOrder($user_id);
+
+        if (!empty($order->id)) {
+            error_log("Found order #{$order->id}, setting status to $status");
+            $order->status = $status;
+            $order->saveOrder();
+        } else {
+            error_log("No order found for user $user_id");
+        }
+    }
+}
+add_action('pmpro_after_change_membership_level', 'update_order_status_from_custom_dropdown', 10, 2);
+
+add_action('admin_head', function() {
+    echo '<style>.pmp_banner_wrapper, .pmpro_banner { display: none !important; }</style>';
+});
+
+add_action('admin_head', function() {
+    echo '<style>
+        .pmp_banner_wrapper, .pmpro_banner { display: none !important; }
+        a[href*="page=pmpro-addons"],
+        a[href*="page=pmpro-license"] {
+            display: none !important;
+        }
+    </style>';
+});
+
+add_action('wp_head', function() {
+    if (is_user_logged_in()) {
+        echo '<style>
+            #wp-admin-bar-gform-forms,
+            #wp-admin-bar-tribe-events, #wp-admin-bar-paid-memberships-pro, #wp-admin-bar-maintenance_options, #wp-admin-bar-salient-hook-locations, #wp-admin-bar-pmpro-admin-membership-access {
+                display: none !important;
+            }
+        </style>';
+    }
+});
+
+
+add_action('pmpro_memberslist_before_table', function() {
+    // Get current search value if any
+    $institute_search = isset($_REQUEST['institute_search']) ? sanitize_text_field($_REQUEST['institute_search']) : '';
+    ?>
+    <div style="margin-bottom: 16px; display: inline-flex; gap: 8px; align-items: center; margin-left: 260px;">
+        <input
+            type="text"
+            id="institute_search"
+            name="institute_search"
+            value="<?php echo esc_attr($institute_search); ?>"
+            placeholder="Enter Institute Name"
+            style="padding: 0px 8px; width: 250px;"
+        />
+        <input type="submit" class="button" value="Search" />
+    </div>
+    <?php
+});
+
+
+
+add_filter('pmpro_members_list_sql', function($query) {
+    $clean_query = preg_replace('/\s+/', ' ', $query);
+    $query = trim($clean_query);
+
+
+    if (!empty($_REQUEST['institute_search'])) {
+        global $wpdb;
+
+        $search = sanitize_text_field($_REQUEST['institute_search']);
+
+        // Step 1: Get institute post IDs matching search
+        $institute_ids = $wpdb->get_col(
+            $wpdb->prepare(
+                "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'institute' AND post_title LIKE %s",
+                '%' . $wpdb->esc_like($search) . '%'
+            )
+        );
+
+        if (!empty($institute_ids)) {
+            // Format IDs for SQL IN clause
+            $ids_csv = implode(',', array_map('intval', $institute_ids));
+
+            // Step 2: Add LEFT JOIN for institute usermeta if not present
+            if (strpos($query, "LEFT JOIN {$wpdb->usermeta} um_institute") === false) {
+                $query = str_replace(
+                    "LEFT JOIN {$wpdb->pmpro_memberships_users} mu ON u.ID = mu.user_id",
+                    "LEFT JOIN {$wpdb->pmpro_memberships_users} mu ON u.ID = mu.user_id
+                     LEFT JOIN {$wpdb->usermeta} um_institute ON u.ID = um_institute.user_id AND um_institute.meta_key LIKE 'institute%'",
+                    $query
+                );
+            }
+
+            // Step 3: Add condition to filter by institute IDs before GROUP BY
+            $pattern = '/(GROUP BY\s+u\.ID,\s*mu\.membership_id)/i';
+            $replacement = "AND um_institute.meta_value IN ({$ids_csv}) \n$1";
+
+            $query = preg_replace($pattern, $replacement, $query);
+        } else {
+            // No matching institute found, force no results
+            $query .= " AND 0=1 ";
+        }
+    }
+    // Optionally, you can echo the query for debugging purposes
+    
+    return $query;
+}, 10, 1);
+
+//Woocommerce stripe 1.75 Fees
+
+add_action('admin_head', function() {
+    ?>
+    <style>
+    .page-title-action.pmpro-has-icon.pmpro-has-icon-plus {
+        display: none !important;
+    }
+    </style>
+    <?php
+});
+add_action('admin_footer', function() {
+    ?>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var input = document.getElementById('paid-memberships-pro-search-input');
+        if(input) {
+            input.placeholder = "Name or Email";
+        }
+    });
+    </script>
+    <?php
+});
+
+add_action('wp_footer', function() {
+    ?>
+    <script>
+    (function() {
+        var oldText = 'Australia Post Shipping Parcel Post (Delivered in 2 business days)';
+        var newText = 'Australia Post Shipping Parcel Post (Delivered in 7-10 business days)';
+        function replaceShippingLabels() {
+            // Cart/checkout summary
+            document.querySelectorAll('.wc-block-components-totals-shipping__via').forEach(function(el) {
+                if (el.textContent.trim() === oldText) {
+                    el.textContent = newText;
+                }
+            });
+            // Shipping method selectors
+            document.querySelectorAll('.wc-block-components-radio-control__label').forEach(function(el) {
+                if (el.textContent.trim() === oldText) {
+                    el.textContent = newText;
+                }
+            });
+        }
+
+        // Initial run
+        replaceShippingLabels();
+
+        // Watch for DOM updates (React, AJAX, etc.)
+        var observer = new MutationObserver(replaceShippingLabels);
+        observer.observe(document.body, { childList: true, subtree: true });
+    })();
+    </script>
+    <?php
+});
+
+
+add_filter('pmpro_tax', function($tax, $values, $order) {
+    if(!is_admin() && isset($_REQUEST['gateway']) && $_REQUEST['gateway'] === 'stripe') {
+        $tax_rate = 0.02; // 2%
+        $amount = isset($values['price']) ? (float) $values['price'] : 0;
+        $tax = round($amount * $tax_rate, 2);
+    }
+    return $tax;
+}, 10, 3);
+
+
+// Show the date dropdown before the Members List table
+add_action('pmpro_memberslist_before_table', function () {
+    $date_range = isset($_REQUEST['date_range']) ? sanitize_text_field($_REQUEST['date_range']) : '';
+    ?>
+    <div style="display: inline-block; margin-right: 8px;">
+        <label for="pmpro_date_range">Registered in:</label>
+        <select name="date_range" id="pmpro_date_range" style="margin-left: 4px;">
+            <option value="">Any Time</option>
+            <option value="today" <?php selected($date_range, 'today'); ?>>Today</option>
+            <option value="this_month" <?php selected($date_range, 'this_month'); ?>>This Month</option>
+            <option value="last_30" <?php selected($date_range, 'last_30'); ?>>Last 30 Days</option>
+            <option value="last_90" <?php selected($date_range, 'last_90'); ?>>Last 90 Days</option>
+            <option value="this_year" <?php selected($date_range, 'this_year'); ?>>This Year</option>
+        </select>
+    </div>
+    <script>
+    // Auto-submit the form when the dropdown changes
+    document.addEventListener('DOMContentLoaded', function() {
+        var dr = document.getElementById('pmpro_date_range');
+        if (dr) dr.addEventListener('change', function() {
+            dr.form.submit();
+        });
+    });
+    </script>
+    <?php
+});
+
+// Filter users by the selected date range
+add_action('pre_user_query', function($query) {
+    global $wpdb, $current_screen;
+
+    if (
+        !is_admin() ||
+        empty($current_screen) ||
+        $current_screen->id !== 'memberships_page_pmpro-memberslist'
+    ) {
+        return;
+    }
+
+    if (!empty($_REQUEST['date_range'])) {
+        $range = $_REQUEST['date_range'];
+        $where = '';
+
+        if ($range === 'today') {
+            $where = "AND DATE(user_registered) = CURDATE()";
+        } elseif ($range === 'this_month') {
+            $where = "AND YEAR(user_registered) = YEAR(CURDATE()) AND MONTH(user_registered) = MONTH(CURDATE())";
+        } elseif ($range === 'last_30') {
+            $where = "AND user_registered >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+        } elseif ($range === 'last_90') {
+            $where = "AND user_registered >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)";
+        } elseif ($range === 'this_year') {
+            $where = "AND YEAR(user_registered) = YEAR(CURDATE())";
+        }
+        if ($where) {
+            $query->query_where .= " $where";
+        }
+    }
+});
+
+add_action('wp_footer', function() {
+    if (is_page('membership-checkout')) : // Adjust if your checkout is a different slug
+    ?>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.pmpro_level_cost_text p').forEach(function(p) {
+            // Remove only the sentence that matches exactly
+            p.innerHTML = p.innerHTML.replace(/\. Customers in NSW will be charged 1\.75% tax\./, '');
+        });
+    });
+    </script>
+    <?php
+    endif;
+});
+
+add_filter('woocommerce_order_shipping_to_display_shipped_via', function($label, $order) {
+    $old_texts = [
+        'Australia Post Shipping Parcel Post (Delivered in 2 business days)',
+        'Australia Post Shipping Parcel Post (Delivered in 3 business days)',
+        'Australia Post Shipping Parcel Post (Delivered in 4 business days)',
+        'Australia Post Shipping Parcel Post (Delivered in 5 business days)',
+        'Australia Post Shipping Parcel Post (Delivered in 3-4 business days)',
+        'Australia Post Shipping Parcel Post (Delivered in 5-7 business days)',
+        'Australia Post Shipping Parcel Post (Delivered in 7 business days)',
+        'Australia Post Shipping Parcel Post (Delivered in 10 business days)',
+    ];
+    $new_text = 'Australia Post Shipping Parcel Post (Delivered in 7-10 business days)';
+    return str_replace($old_texts, $new_text, $label);
+}, 10, 2);
+
+add_filter('woocommerce_email_order_meta_fields', function($fields, $sent_to_admin, $order) {
+    $old_texts = [
+        'Australia Post Shipping Parcel Post (Delivered in 2 business days)',
+        'Australia Post Shipping Parcel Post (Delivered in 3 business days)',
+        'Australia Post Shipping Parcel Post (Delivered in 4 business days)',
+        'Australia Post Shipping Parcel Post (Delivered in 5 business days)',
+        'Australia Post Shipping Parcel Post (Delivered in 3-4 business days)',
+        'Australia Post Shipping Parcel Post (Delivered in 5-7 business days)',
+        'Australia Post Shipping Parcel Post (Delivered in 7 business days)',
+        'Australia Post Shipping Parcel Post (Delivered in 10 business days)',
+    ];
+    $new_text = 'Australia Post Shipping Parcel Post (Delivered in 7-10 business days)';
+    foreach ($fields as &$field) {
+        if (isset($field['value'])) {
+            $field['value'] = str_replace($old_texts, $new_text, $field['value']);
+        }
+    }
+    return $fields;
+}, 10, 3);
+
+
+add_filter('pmpro_registration_checks', function($okay) {
+    if(!is_admin()) {
+        $level = isset($_REQUEST['level']) ? intval($_REQUEST['level']) : (isset($_REQUEST['pmpro_level']) ? intval($_REQUEST['pmpro_level']) : 0);
+        $required_levels = array(2,3,4,5);
+
+        // Is "Add New Institute" checked?
+        $is_adding_new_institute = !empty($_REQUEST['add_new_institute_checkbox']);
+
+        if (in_array($level, $required_levels)) {
+            if (!$is_adding_new_institute && empty($_REQUEST['selected_institute'])) {
+                pmpro_setMessage('Please select your Institute from the dropdown.', 'pmpro_error');
+                return false;
+            }
+            // (Optional) If adding new, require name:
+            /*
+            if ($is_adding_new_institute && empty($_REQUEST['new_institute_name'])) {
+                pmpro_setMessage('Please enter the name of your new Institute.', 'pmpro_error');
+                return false;
+            }
+            */
+        }
+    }
+    return $okay;
+});
